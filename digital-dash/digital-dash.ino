@@ -151,13 +151,27 @@ return;
 }
 
 unsigned long readbatteryvolt() {
-unsigned long battvalue = analogRead(A0);      // read the input on analoge pin 1
+  unsigned long battvalue = analogRead(A0);      // read the input on analoge pin 1
   battvalue = battvalue * 48 ;   // convert to a voltage (0-5V) multiplied by 10 (my voltage regulator outputs 4.8V)
   battvalue = battvalue * 675;   // multiply up by ratio of voltage divider resistors
   battvalue = battvalue / 216;   
   battvalue = battvalue / 1023;  // 1023 represent power supply, i.e. 4.8V
   battvalue = battvalue + 5;     // add back in 0.5V voltage drop due to diode on 12V input
-return battvalue;
+  if (battvalue < battvoltmin) {
+    battvoltmin = battvalue;
+  }  
+  if (battvalue > battvoltmax) {
+    battvoltmax = battvalue;
+  }  
+  if (battvalue > battvoltmaxalarm || battvalue < battvoltminalarm) {
+    oldscreen = screen;
+    screen = 7;
+    alarmreason = 4;
+  }
+  else {
+    alarmreason = 0;
+  }    
+  return battvalue;
 }
 
 void readrpm() {
