@@ -12,7 +12,7 @@ int ledPins[] = {
   41, 43, 45, 47, 49, 51, 53, 40, 42, 44, 46, 48, 50, 52 };   // an array of digital pin numbers to which LEDs are attached
 int oldscreen = 0;
 int screen = 0;
-int sampleperiod = 500;
+int sampleperiod = 250;
 unsigned long sampleold = 0;
 int logperiod = 1000;
 unsigned long logold = 0;
@@ -27,11 +27,11 @@ int oiltempmaxalarm = 100;
 int airtemp = 0;
 int airtempmin = 0;
 int airtempmax = 0;
-int battvolt = 0;
-int battvoltmin = 0;
-int battvoltmax = 0;
-int battvoltminalarm = 130;    // voltage *10 to avoid using float arithmetic 
-int battvoltmaxalarm = 145;    // voltage *10 to avoid using float arithmetic 
+unsigned long battvolt = 0;
+unsigned long battvoltmin = 0;
+unsigned long battvoltmax = 0;
+unsigned long battvoltminalarm = 130;    // voltage *10 to avoid using float arithmetic 
+unsigned long battvoltmaxalarm = 145;    // voltage *10 to avoid using float arithmetic 
 int g = 0;
 int gmin = 0;
 int gmax = 0;
@@ -51,7 +51,7 @@ LiquidCrystal lcd(36, 34, 32, 30, 28, 26);
 
 void setup() {
 
-// attachInterrupt(0, tachpulse, RISING);  
+ attachInterrupt(0, tachpulse, RISING);  
   
 // loop over the pin array and set them all to output:
   for (int thisLed = 0; thisLed < ledCount; thisLed++) {
@@ -60,6 +60,7 @@ void setup() {
   lcd.begin(16, 2);
   lcdstartup();        // display welcome message
   ledstartup();        // sweep leds
+  delay(500);
 }
 
 void loop() {
@@ -69,7 +70,7 @@ void loop() {
     //  readwatertemp();
     //  readoiltemp();
     //  readairtemp();
-    readbatteryvolt();
+    battvolt = readbatteryvolt();
     //  readaccelerometer();
     readrpm();
   }
@@ -149,12 +150,14 @@ void ledstartup() {
 return;
 }
 
-void readbatteryvolt() {
-  int battvalue = analogRead(A0);      // read the input on analoge pin 1
-  battvolt = battvalue * (5 / 102.3);  // convert to a voltage (0-5V) multiplied by 10 (i.e. (0-50V)
-  battvolt = battvolt * (47 / 22);     // multiply up by ratio of voltage divider resistors
-  battvolt = battvolt + 3;             // add back in 0.3V voltage drop due to diode on 12V input
-return;
+unsigned long readbatteryvolt() {
+unsigned long battvalue = analogRead(A0);      // read the input on analoge pin 1
+  battvalue = battvalue * 48 ;   // convert to a voltage (0-5V) multiplied by 10 (my voltage regulator outputs 4.8V)
+  battvalue = battvalue * 675;   // multiply up by ratio of voltage divider resistors
+  battvalue = battvalue / 216;   
+  battvalue = battvalue / 1023;  // 1023 represent power supply, i.e. 4.8V
+  battvalue = battvalue + 5;     // add back in 0.5V voltage drop due to diode on 12V input
+return battvalue;
 }
 
 void readrpm() {
@@ -174,8 +177,12 @@ void displayscreenhome() {
   char line1[17] = {"AT:      BV:    "};
   lcd.setCursor(0, 1);
   lcd.print(line1);
-  lcd.setCursor(0, 12);
+  lcd.setCursor(13, 1);
   lcd.print(battvolt);
+  lcd.setCursor(12, 1);
+  lcd.print(battvolt);
+  lcd.setCursor(14, 1);
+  lcd.print('.');
 return;
 }
 
