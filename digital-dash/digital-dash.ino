@@ -253,19 +253,19 @@ void displayscreenhome()
 {
 //  char line0[17] = {"WT:      OT:    "};
   lcd.setCursor(0, 0);
-  lcd.print("WT:");
-  lcd.setCursor(9, 0);
-  lcd.print("OT:");
+  lcd.print("WAT:");
+  lcd.setCursor(8, 0);
+  lcd.print("OIL:");
   lcd.setCursor(0, 1);
-  lcd.print("AT:");
-  lcd.setCursor(9, 1);
-  lcd.print("BV:");
+  lcd.print("AIR:");
+  lcd.setCursor(8, 1);
+  lcd.print("BAT:");
 //  char line1[17] = {"AT:      BV:    "};
 //  lcd.setCursor(0, 1);
 //  lcd.print(line1);
   if ((airtemp > -40) && (airtemp < 125))
   {
-    lcd.setCursor(3, 1);
+    lcd.setCursor(4, 1);
     lcd.print(airtemp,0);
   }
   if ((battvolt > 0) && (battvolt <20))
