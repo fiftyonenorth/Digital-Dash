@@ -18,6 +18,8 @@ long logperiod = 1000;
 long logold = 0;
 long displayperiod = 500;
 long displayold = 0;
+long refreshledsperiod = 250;
+long refreshledsold = 0;
 unsigned long currentmillis;
 int watertemp = 0;
 int watertempmin = 0;
@@ -26,7 +28,7 @@ int watertempmaxalarm = 95;
 int oiltemp = 0;
 int oiltempmin = 0;
 int oiltempmax = 0;
-int oiltempmaxalarm = 100;
+int oiltempmaxalarm = 500;
 float airtemp = 0;
 float airtempmin = 0;
 float airtempmax = 0;
@@ -39,6 +41,8 @@ int g = 0;
 int gmin = 0;
 int gmax = 0;
 int rpm = 0;
+int rpmvalue = 0;
+int multiplier = 10;
 volatile int rpmcount = 0;
 int rpmmax = 0;
 int rpmredline = 6000;
@@ -54,8 +58,8 @@ LiquidCrystal lcd(36, 34, 32, 30, 28, 26);
 
 void setup()
 {
-  Serial.begin(9600);
-  attachInterrupt(0, tachpulse, RISING);  
+//  Serial.begin(9600);
+  attachInterrupt(0, tachpulse, CHANGE);  
   
 // loop over the pin array and set them all to output:
   for (int thisLed = 0; thisLed < ledCount; thisLed++)
@@ -65,12 +69,13 @@ void setup()
   lcd.begin(16, 2);
   lcdstartup();        // display welcome message
   ledstartup();        // sweep leds
+  clearscreen();       // blank screen
 }
 
 void loop()
 {
   
-  // refresh parameters
+  // refresh parameters, except rpm
   currentmillis = millis();
   if (currentmillis - sampleold > sampleperiod)
   {
@@ -80,7 +85,6 @@ void loop()
     airtemp = readairtemp();
     battvolt = readbatteryvolt();
     //  readaccelerometer();
-    readrpm();
   }
   
   // log parameters
@@ -98,7 +102,6 @@ void loop()
     displayold = millis();
     if (screen == 0)
     {
-      Serial.println("OK2"); 
       displayscreenhome();
     }
     else if (screen == 1)
@@ -132,6 +135,10 @@ void loop()
   }
   
   //refresh leds
+  currentmillis = millis();
+  if (currentmillis - refreshledsold > refreshledsperiod)
+  {
+    refreshledsold = millis();
 //  if (alarmreason != 0) {  // light all leds for alarm
 //    displayleds (65535);
 //  }  
@@ -149,9 +156,11 @@ void loop()
 //      }
 
 //    else {
-//      displayleds (rpm);
+  
+      rpm = readrpm();
+      displayleds (rpm);
 //    }
-//    }
+    }
     
 //  }    
 }  // end of main loop
@@ -179,6 +188,17 @@ void ledstartup()
   }
   return;
 }
+
+void clearscreen()
+{
+  char line0[17] = {"                "};
+  lcd.setCursor(0, 0);
+  lcd.print(line0);
+  char line1[17] = {"                "};
+  lcd.setCursor(0, 1);
+  lcd.print(line1);
+  return;
+}  
 
 float readbatteryvolt()
 {
@@ -211,17 +231,17 @@ float readbatteryvolt()
 float readairtemp()
 {
   int reading = analogRead(airsensorpin);  
-  float voltage = reading * 5;
-  voltage = voltage / 1024; 
-  float airtempvalue = (voltage - 0.5) * 100  ;
+  float voltage = reading * 5.0;
+  voltage /= 1024;
+  float airtempvalue = (voltage - 0.5) * 100 ;
   return airtempvalue;
 }  
 
-void readrpm()
+int readrpm()
 {
-  rpm = (((rpmcount*4)*60)/2);
+  rpmvalue = (((rpmcount/10)*60));
   rpmcount = 0;  
-  return;
+  return rpmvalue;
 }
 
 void logtosdcard()
@@ -231,16 +251,22 @@ void logtosdcard()
 
 void displayscreenhome()
 {
-  char line0[17] = {"WT:      OT:    "};
+//  char line0[17] = {"WT:      OT:    "};
   lcd.setCursor(0, 0);
-  lcd.print(line0);
-  char line1[17] = {"AT:      BV:    "};
+  lcd.print("WT:");
+  lcd.setCursor(9, 0);
+  lcd.print("OT:");
   lcd.setCursor(0, 1);
-  lcd.print(line1);
+  lcd.print("AT:");
+  lcd.setCursor(9, 1);
+  lcd.print("BV:");
+//  char line1[17] = {"AT:      BV:    "};
+//  lcd.setCursor(0, 1);
+//  lcd.print(line1);
   if ((airtemp > -40) && (airtemp < 125))
   {
     lcd.setCursor(3, 1);
-    lcd.print(airtemp,1);
+    lcd.print(airtemp,0);
   }
   if ((battvolt > 0) && (battvolt <20))
   {
@@ -287,12 +313,26 @@ void displayscreenalarm()
 
 void displayleds(int revs)
 {
+  for (int displed = 0; displed < ledCount; displed++)
+  {
+    if (revs > (displed*multiplier)) 
+    {
+      digitalWrite(ledPins[displed], HIGH);
+    }
+    else
+    {
+      digitalWrite(ledPins[displed], LOW);
+    }
+  }  
   return;
 }
 
 void tachpulse()
 {
   rpmcount++;
+  digitalWrite(52, HIGH);
+  delay(250);
+  digitalWrite(52, LOW);
   return;
 }
 
