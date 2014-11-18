@@ -18,7 +18,7 @@ long logperiod = 1000;
 long logold = 0;
 long displayperiod = 500;
 long displayold = 0;
-long refreshledsperiod = 250;
+long refreshledsperiod = 200;
 long refreshledsold = 0;
 unsigned long currentmillis;
 int watertemp = 0;
@@ -28,7 +28,7 @@ int watertempmaxalarm = 95;
 int oiltemp = 0;
 int oiltempmin = 0;
 int oiltempmax = 0;
-int oiltempmaxalarm = 500;
+int oiltempmaxalarm = 100;
 float airtemp = 0;
 float airtempmin = 0;
 float airtempmax = 0;
@@ -37,18 +37,24 @@ float battvoltmin = 0;
 float battvoltmax = 0;
 float battvoltminalarm = 130;
 float battvoltmaxalarm = 145; 
-int g = 0;
-int gmin = 0;
-int gmax = 0;
+float glon = 0;
+float glonmax = 0;
+float glat = 0;
+float glatmax = 0;
 int rpm = 0;
 int rpmvalue = 0;
-int multiplier = 10;
+int multiplier = 500;
 volatile int rpmcount = 0;
 int rpmmax = 0;
 int rpmredline = 6000;
 int alarmreason = 0;
 boolean leftkeydown = false;
 boolean rightkeydown = false;
+int readleftkey = LOW;
+int readrightkey = LOW;
+long readleftkeyold = 0;
+long readrightkeyold = 0;
+long readkeyperiod = 200;
 unsigned long strobeledsold = 0;
 int strobeledsperiod = 100;
 boolean strobeleds = false;
@@ -58,8 +64,12 @@ LiquidCrystal lcd(36, 34, 32, 30, 28, 26);
 
 void setup()
 {
-//  Serial.begin(9600);
-  attachInterrupt(0, tachpulse, CHANGE);  
+  Serial.begin(9600);
+  attachInterrupt(0, tachpulse, CHANGE);
+
+// set digital pins as inputs to read key presses
+  pinMode(3,INPUT_PULLUP);
+  pinMode(4,INPUT_PULLUP);
   
 // loop over the pin array and set them all to output:
   for (int thisLed = 0; thisLed < ledCount; thisLed++)
@@ -74,6 +84,35 @@ void setup()
 
 void loop()
 {
+  // check for key presses
+  currentmillis = millis();
+  if (currentmillis - readleftkeyold > readkeyperiod)
+  {
+    readleftkey = digitalRead(4);
+    if (readleftkey == LOW)
+    {
+      readleftkeyold = millis();
+      Serial.println("Left button press!" );
+      screen++;
+      if (screen > 6)
+      {
+        screen = 0;
+      }
+      Serial.print("Screen=");
+      Serial.println(screen);
+      clearscreen();
+    }
+  }  
+  if (currentmillis - readrightkeyold > readkeyperiod)
+  {
+    readrightkey = digitalRead(3);
+    if (readrightkey == LOW)
+    {
+      readrightkeyold = millis();
+      Serial.println("Right button press!" );
+    }
+  }
+  
   
   // refresh parameters, except rpm
   currentmillis = millis();
@@ -234,13 +273,25 @@ float readairtemp()
   float voltage = reading * 5.0;
   voltage /= 1024;
   float airtempvalue = (voltage - 0.5) * 100 ;
+  if (airtempvalue < airtempmin)
+  {
+    airtempmin = airtempvalue;
+  }  
+  if (airtempvalue > airtempmax)
+  {
+    airtempmax = airtempvalue;
+  }  
   return airtempvalue;
 }  
 
 int readrpm()
 {
-  rpmvalue = (((rpmcount/10)*60));
-  rpmcount = 0;  
+  rpmvalue = (rpmcount*150);  // *60 secs  /2 state changes  *5 samples per sec
+  rpmcount = 0;
+  if (rpm > rpmmax)
+  {
+    rpmmax = rpm;
+  }    
   return rpmvalue;
 }
 
@@ -251,7 +302,6 @@ void logtosdcard()
 
 void displayscreenhome()
 {
-//  char line0[17] = {"WT:      OT:    "};
   lcd.setCursor(0, 0);
   lcd.print("WAT:");
   lcd.setCursor(8, 0);
@@ -260,49 +310,120 @@ void displayscreenhome()
   lcd.print("AIR:");
   lcd.setCursor(8, 1);
   lcd.print("BAT:");
-//  char line1[17] = {"AT:      BV:    "};
-//  lcd.setCursor(0, 1);
-//  lcd.print(line1);
-  if ((airtemp > -40) && (airtemp < 125))
-  {
-    lcd.setCursor(4, 1);
-    lcd.print(airtemp,0);
-  }
-  if ((battvolt > 0) && (battvolt <20))
-  {
-    lcd.setCursor(12, 1);
-    lcd.print(battvolt,1);
-  }
+  lcd.setCursor(4, 1);
+  lcd.print("    ");
+  lcd.setCursor(4, 1);
+  lcd.print(airtemp,0);
+  lcd.setCursor(12, 1);
+  lcd.print("    ");
+  lcd.setCursor(12, 1);
+  lcd.print(battvolt,1);
   return;
 }
 
 void displayscreenwater()
 {
+  lcd.setCursor(4, 0);
+  lcd.print("WAT:");
+  lcd.setCursor(8, 0);
+  lcd.print(watertemp);
+  lcd.setCursor(0, 1);
+  lcd.print("MIN:");
+  lcd.setCursor(4, 1);
+  lcd.print(watertempmin);
+  lcd.setCursor(9, 1);
+  lcd.print("MAX:");
+  lcd.setCursor(13, 1);
+  lcd.print(watertempmax);
   return;
 }
 
 void displayscreenoil()
 {
+  lcd.setCursor(4, 0);
+  lcd.print("OIL:");
+  lcd.setCursor(8, 0);
+  lcd.print(oiltemp);
+  lcd.setCursor(0, 1);
+  lcd.print("MIN:");
+  lcd.setCursor(4, 1);
+  lcd.print(oiltempmin);
+  lcd.setCursor(9, 1);
+  lcd.print("MAX:");
+  lcd.setCursor(13, 1);
+  lcd.print(oiltempmax);
   return;
 }
 
 void displayscreenair()
 {
+  lcd.setCursor(4, 0);
+  lcd.print("AIR:");
+  lcd.setCursor(8, 0);
+  lcd.print(airtemp, 0);
+  lcd.setCursor(0, 1);
+  lcd.print("MIN:");
+  lcd.setCursor(4, 1);
+  lcd.print(airtempmin, 0);
+  lcd.setCursor(9, 1);
+  lcd.print("MAX:");
+  lcd.setCursor(13, 1);
+  lcd.print(airtempmax, 0);
   return;
 }
 
 void displayscreenbatt()
 {
+  lcd.setCursor(4, 0);
+  lcd.print("BAT:");
+  lcd.setCursor(8, 0);
+  lcd.print(battvolt, 1);
+  lcd.setCursor(0, 1);
+  lcd.print("MN:");
+  lcd.setCursor(3, 1);
+  lcd.print(battvoltmin, 1);
+  lcd.setCursor(9, 1);
+  lcd.print("MX:");
+  lcd.setCursor(12, 1);
+  lcd.print(battvoltmax, 1);
   return;
 }
 
 void displayscreenaccel()
 {
+  lcd.setCursor(0, 0);
+  lcd.print("LON:");
+  lcd.setCursor(4, 0);
+  lcd.print(glon, 1);
+  lcd.setCursor(9, 0);
+  lcd.print("MX:");
+  lcd.setCursor(12, 0);
+  lcd.print(glonmax, 1);
+  lcd.setCursor(0, 1);
+  lcd.print("LAT:");
+  lcd.setCursor(4, 1);
+  lcd.print(glon, 1);
+  lcd.setCursor(9, 1);
+  lcd.print("MX:");
+  lcd.setCursor(12, 1);
+  lcd.print(glonmax, 1);
   return;
 }
 
 void displayscreenrpm()
 {
+  lcd.setCursor(4, 0);
+  lcd.print("RPM:");
+  lcd.setCursor(8, 0);
+  lcd.print("    ");
+  lcd.setCursor(8, 0);
+  lcd.print(rpm);
+  lcd.setCursor(4, 1);
+  lcd.print("MAX:");
+  lcd.setCursor(8, 1);
+  lcd.print("    ");
+  lcd.setCursor(8, 1);
+  lcd.print(rpmmax);
   return;
 }
 
