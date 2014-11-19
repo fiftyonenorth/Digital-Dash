@@ -1,53 +1,138 @@
-//////////////////////
-// Digital Dash     // 
-// David T          //
-//////////////////////
+////////////////////////////////////////////////////////////////////////////////
+// Project: Digital Dash                                                      //
+// Author:  David T                                                           //
+// Date:    19 Nov 2014                                                       //
+// Details: Car digital dash based upon Arduino Mega 2560 R3                  //
+//                                                                            //
+// Pin   Assignment                                                           //
+// 02    Tacho pulse input - Interrupt 0                                      //
+// 03    Right push btton                                                     //
+// 04    Left push button                                                     //
+// 40    Tacho LED8                                                           //
+// 41    Tacho LED1                                                           //
+// 42    Tacho LED9                                                           //
+// 43    Tacho LED2                                                           //
+// 44    Tacho LED10                                                          //
+// 45    Tacho LED3                                                           //
+// 46    Tacho LED11                                                          //
+// 47    Tacho LED4                                                           //
+// 48    Tacho LED12                                                          //
+// 49    Tacho LED5                                                           //
+// 50    Tacho LED13                                                          //
+// 51    Tacho LED6                                                           //
+// 52    Tacho LED14                                                          //
+// 53    Tacho LED7                                                           //
+// A0    Battery voltage                                                      //
+// A1    Water temperature                                                    //
+// A2    Oil temperature                                                      //
+// A3    Air temperature                                                      //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
 
-// include the library code:
+////////////////////////////////////////////////////////////////////////////////
+// Libraries to include                                                       //
+////////////////////////////////////////////////////////////////////////////////
 #include <LiquidCrystal.h>
+// initialize the lcd library with the numbers of the interface pins
+LiquidCrystal lcd(36, 34, 32, 30, 28, 26);
 
-const int ledCount = 14;    // the number of digital pin LEDs in the bar graph
-int ledPins[] = { 
-  41, 43, 45, 47, 49, 51, 53, 40, 42, 44, 46, 48, 50, 52 };   // an array of digital pin numbers to which LEDs are attached
-int airsensorpin = 3;  
-int oldscreen = 0;
-int screen = 0;
-long sampleperiod = 250;
-long sampleold = 0;
-long logperiod = 1000;
-long logold = 0;
-long displayperiod = 500;
-long displayold = 0;
-long refreshledsperiod = 300;
+////////////////////////////////////////////////////////////////////////////////
+// LED control parameters                                                     //
+////////////////////////////////////////////////////////////////////////////////
+const int ledCount = 14;      // the number of digital pin LEDs in the bar graph
+int ledPins[] = {             // array of digital pin numbers with LEDs attached
+  41, 43, 45, 47, 49, 51, 53, 40, 42, 44, 46, 48, 50, 52 };   
+long refreshledsperiod = 333; //read RPM and update LED 3 times/sec
 long refreshledsold = 0;
-unsigned long currentmillis;
-int watertemp = 0;
-int watertempmin = 0;
-int watertempmax = 0;
-int watertempmaxalarm = 95;
-int oiltemp = 0;
-int oiltempmin = 0;
-int oiltempmax = 0;
-int oiltempmaxalarm = 100;
-float airtemp = 0;
-float airtempmin = 0;
-float airtempmax = 0;
-float battvolt = 0;
-float battvoltmin = 0;
-float battvoltmax = 0;
-float battvoltminalarm = 130;
-float battvoltmaxalarm = 145; 
+long strobeledsold = 0;
+int strobeledsperiod = 100;
+boolean strobeleds = false;
+
+////////////////////////////////////////////////////////////////////////////////
+// Display control parameters                                                 //
+////////////////////////////////////////////////////////////////////////////////
+int oldscreen = 0;           // screen to return to after clearing alarm
+int screen = 0;              // start on home screen
+long displayperiod = 500;    // refresh screen 2 times/sec
+long displayold = 0;         // to store last time screen display event occured
+
+////////////////////////////////////////////////////////////////////////////////
+// Data sampling control parameters                                                 //
+////////////////////////////////////////////////////////////////////////////////
+long sampleperiod = 500;     // read parameters 2 times/sec
+long sampleold = 0;          // to store last time sample event occured
+
+////////////////////////////////////////////////////////////////////////////////
+// Data logging control parameters                                            //
+////////////////////////////////////////////////////////////////////////////////
+long logperiod = 1000;       // write data to SD card 1 times/second
+long logold = 0;             // to store last time data log event occured
+
+////////////////////////////////////////////////////////////////////////////////
+// Miscellaneous loop control parameters                                      //
+////////////////////////////////////////////////////////////////////////////////
+unsigned long currentmillis; // used to measure previous event vs current time
+boolean firstloop = true;    // some min. values need to be set higher than zero
+
+////////////////////////////////////////////////////////////////////////////////
+// Water temperature parameters                                               //
+////////////////////////////////////////////////////////////////////////////////
+int watertemp = 0;           // current water temperature reading
+int watertempmin = 0;        // minimum water temperature reading
+int watertempmax = 0;        // maximum water temperature reading
+int watertempmaxalarm = 95;  // water temperature alarm trigger value
+
+////////////////////////////////////////////////////////////////////////////////
+// Oil temperature parameters                                                 //
+////////////////////////////////////////////////////////////////////////////////
+int oiltemp = 0;             // current oil temperature reading
+int oiltempmin = 0;          // minimum oil temperature reading
+int oiltempmax = 0;          // maximum oil temperature reading
+int oiltempmaxalarm = 100;   // oil temperature alarm trigger value
+
+////////////////////////////////////////////////////////////////////////////////
+// Air temperature parameters                                                 //
+////////////////////////////////////////////////////////////////////////////////
+float airtemp = 0;           // current air temperature reading
+float airtempmin = 0;        // minimum air temperature reading
+float airtempmax = 0;        // maximum air temperature reading
+float airtempminalarm = 3;   // ice warning alarm trigger value
+
+////////////////////////////////////////////////////////////////////////////////
+// Battery voltage parameters                                                 //
+////////////////////////////////////////////////////////////////////////////////
+float battvolt = 0;               // current battery voltage reading
+float battvoltmin = 0;            // minimum battery voltage reading
+float battvoltmax = 0;            // maximum battery voltage reading
+float battvoltminalarm = 130;     // minimum battery voltage alarm trigger value
+float battvoltmaxalarm = 145;     // maximum battery voltage alarm trigger value
+
+////////////////////////////////////////////////////////////////////////////////
+// Accelerometer parameters                                                   //
+////////////////////////////////////////////////////////////////////////////////
 float glon = 0;
 float glonmax = 0;
 float glat = 0;
 float glatmax = 0;
+
+////////////////////////////////////////////////////////////////////////////////
+// RPM parameters                                                             //
+////////////////////////////////////////////////////////////////////////////////
 int rpm = 0;
 int rpmvalue = 0;
 int multiplier = 500;
 volatile int rpmcount = 0;
 int rpmmax = 0;
-int rpmredline = 6000;
+int rpmredline = 6000;        //  RPM trigger value to strobe LEDs
+
+////////////////////////////////////////////////////////////////////////////////
+// Alarm parameters                                                           //
+////////////////////////////////////////////////////////////////////////////////
 int alarmreason = 0;
+
+////////////////////////////////////////////////////////////////////////////////
+// Key press control parameters                                               //
+////////////////////////////////////////////////////////////////////////////////
 boolean leftkeydown = false;
 boolean rightkeydown = false;
 int readleftkey = LOW;
@@ -55,16 +140,13 @@ int readrightkey = LOW;
 long readleftkeyold = 0;
 long readrightkeyold = 0;
 long readkeyperiod = 200;
-unsigned long strobeledsold = 0;
-int strobeledsperiod = 100;
-boolean strobeleds = false;
 
-// initialize the library with the numbers of the interface pins
-LiquidCrystal lcd(36, 34, 32, 30, 28, 26);
-
+////////////////////////////////////////////////////////////////////////////////
+// Set Up                                                                     //
+////////////////////////////////////////////////////////////////////////////////
 void setup()
 {
-  Serial.begin(9600);
+//  Serial.begin(9600);
   attachInterrupt(0, tachpulse, FALLING);
 
 // set digital pins as inputs to read key presses
@@ -82,6 +164,9 @@ void setup()
   clearscreen();       // blank screen
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Main Loop                                                                  //
+////////////////////////////////////////////////////////////////////////////////
 void loop()
 {
   // check for key presses
@@ -92,14 +177,11 @@ void loop()
     if (readleftkey == LOW)
     {
       readleftkeyold = millis();
-      Serial.println("Left button press!" );
       screen++;
       if (screen > 6)
       {
         screen = 0;
       }
-      Serial.print("Screen=");
-      Serial.println(screen);
       clearscreen();
     }
   }  
@@ -108,12 +190,11 @@ void loop()
     readrightkey = digitalRead(3);
     if (readrightkey == LOW)
     {
+      reset();
       readrightkeyold = millis();
-      Serial.println("Right button press!" );
     }
   }
-  
-  
+    
   // refresh parameters, except rpm
   currentmillis = millis();
   if (currentmillis - sampleold > sampleperiod)
@@ -125,6 +206,33 @@ void loop()
     battvolt = readbatteryvolt();
     //  readaccelerometer();
   }
+    
+  //refresh rpm
+  currentmillis = millis();
+  if (currentmillis - refreshledsold > refreshledsperiod)
+  {
+    refreshledsold = millis();
+//  if (alarmreason != 0) {  // light all leds for alarm
+//    displayleds (65535);
+//  }  
+//  else {
+    
+//    if (rpm > rpmredline) {  // strobe leds for redline rpm
+
+//      if ((strobeleds == false) && (millis() > (strobeledsold + strobeledsperiod))) {
+//        displayleds (0);
+//        strobeleds == true;
+//      }
+//      else if ((strobeleds == true) && (millis() > (strobeledsold + strobeledsperiod))) {
+//        displayleds (65535);
+//        strobeleds == false;
+//      }
+
+//    else {
+      rpm = readrpm();
+      displayleds (rpm);
+//    }
+    }
   
   // log parameters
   currentmillis = millis();
@@ -172,38 +280,21 @@ void loop()
       displayscreenalarm();
     }
   }
-  
-  //refresh leds
-  currentmillis = millis();
-  if (currentmillis - refreshledsold > refreshledsperiod)
-  {
-    refreshledsold = millis();
-//  if (alarmreason != 0) {  // light all leds for alarm
-//    displayleds (65535);
-//  }  
-//  else {
-    
-//    if (rpm > rpmredline) {  // strobe leds for redline rpm
 
-//      if ((strobeleds == false) && (millis() > (strobeledsold + strobeledsperiod))) {
-//        displayleds (0);
-//        strobeleds == true;
-//      }
-//      else if ((strobeleds == true) && (millis() > (strobeledsold + strobeledsperiod))) {
-//        displayleds (65535);
-//        strobeleds == false;
-//      }
-
-//    else {
-  
-      rpm = readrpm();
-      displayleds (rpm);
-//    }
-    }
-    
+    firstloop = false;
 //  }    
-}  // end of main loop
+}
+////////////////////////////////////////////////////////////////////////////////
+// End of main Loop                                                           //
+////////////////////////////////////////////////////////////////////////////////
 
+////////////////////////////////////////////////////////////////////////////////
+// Functions                                                                  //
+////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////
+// Display LCD startup message                                                //
+////////////////////////////////////////////////////////////////////////////////
 void lcdstartup()
 {
   lcd.setCursor(0, 0);
@@ -213,6 +304,9 @@ void lcdstartup()
   return;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Sweep LEDs at startup                                                      //
+////////////////////////////////////////////////////////////////////////////////
 void ledstartup()
 {
   for (int thisLed = 0; thisLed < ledCount; thisLed++)
@@ -228,6 +322,9 @@ void ledstartup()
   return;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Clear LCD screen                                                           //
+////////////////////////////////////////////////////////////////////////////////
 void clearscreen()
 {
   char line0[17] = {"                "};
@@ -239,6 +336,43 @@ void clearscreen()
   return;
 }  
 
+////////////////////////////////////////////////////////////////////////////////
+// Reset parameters                                                           //
+////////////////////////////////////////////////////////////////////////////////
+void reset()
+{
+  if (screen == 1)
+  {
+    //
+  }
+  else if (screen == 2)
+  {
+    //
+  }
+  else if (screen == 3)
+  {
+    airtempmin = airtemp;
+    airtempmax = airtemp;
+  }
+  else if (screen == 4)
+  {
+    battvoltmin = battvolt;
+    battvoltmax = battvolt;
+  }
+  else if (screen == 5)
+  {
+    //
+  }
+  else if (screen == 6)
+  {
+    rpmmax = 0;
+  }
+return;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Read battery voltage                                                       //
+////////////////////////////////////////////////////////////////////////////////
 float readbatteryvolt()
 {
   int reading = analogRead(A0);         // read the input on analoge pin 0
@@ -246,7 +380,7 @@ float readbatteryvolt()
   battvalue = battvalue * 3.102;        // multiply up by ratio of voltage divider resistors (670 / 216 = 3.102)
   battvalue = battvalue / 1024;         // 1024 represents power supply, i.e. 4.8V
   battvalue = battvalue + 0.5;          // add back in 0.5V voltage drop due to diode on 12V input
-  if (battvalue < battvoltmin)
+  if ((battvalue < battvoltmin) || (firstloop))
   {
     battvoltmin = battvalue;
   }  
@@ -267,13 +401,16 @@ float readbatteryvolt()
   return battvalue;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Read air temperature                                                       //
+////////////////////////////////////////////////////////////////////////////////
 float readairtemp()
 {
-  int reading = analogRead(airsensorpin);  
+  int reading = analogRead(A3);  
   float voltage = reading * 5.0;
   voltage /= 1024;
   float airtempvalue = (voltage - 0.5) * 100 ;
-  if (airtempvalue < airtempmin)
+  if ((airtempvalue < airtempmin) || (firstloop))
   {
     airtempmin = airtempvalue;
   }  
@@ -284,9 +421,15 @@ float readairtemp()
   return airtempvalue;
 }  
 
+////////////////////////////////////////////////////////////////////////////////
+// Read RPM                                                                   //
+////////////////////////////////////////////////////////////////////////////////
 int readrpm()
 {
-  rpmvalue = (rpmcount*200);  // *60 secs *3.333 samples per sec, gives a round multiple of 250 for display
+  rpmvalue = (rpmcount*100);  //     /2 tacho pulses per engine revolution
+                              //     *60 secs
+                              //     *3.333 samples per sec
+                              //     gives a round multiples of 100 for display
   rpmcount = 0;
   if (rpm > rpmmax)
   {
@@ -295,11 +438,18 @@ int readrpm()
   return rpmvalue;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Log data to SD card                                                        //
+////////////////////////////////////////////////////////////////////////////////
 void logtosdcard()
 {
+  // yet to be implemented
   return;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Display home screen (index 0)                                              //
+////////////////////////////////////////////////////////////////////////////////
 void displayscreenhome()
 {
   lcd.setCursor(0, 0);
@@ -321,6 +471,9 @@ void displayscreenhome()
   return;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Display water temperature screen (index 1)                                 //
+////////////////////////////////////////////////////////////////////////////////
 void displayscreenwater()
 {
   lcd.setCursor(4, 0);
@@ -338,6 +491,9 @@ void displayscreenwater()
   return;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Display oil temperature screen (index 2)                                   //
+////////////////////////////////////////////////////////////////////////////////
 void displayscreenoil()
 {
   lcd.setCursor(4, 0);
@@ -355,6 +511,9 @@ void displayscreenoil()
   return;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Display air temperature screen (index 3)                                   //
+////////////////////////////////////////////////////////////////////////////////
 void displayscreenair()
 {
   lcd.setCursor(4, 0);
@@ -372,6 +531,9 @@ void displayscreenair()
   return;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Display battery voltage screen (index 4)                                   //
+////////////////////////////////////////////////////////////////////////////////
 void displayscreenbatt()
 {
   lcd.setCursor(4, 0);
@@ -389,6 +551,9 @@ void displayscreenbatt()
   return;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Display accelerometer screen (index 5)                                     //
+////////////////////////////////////////////////////////////////////////////////
 void displayscreenaccel()
 {
   lcd.setCursor(0, 0);
@@ -410,28 +575,37 @@ void displayscreenaccel()
   return;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Display RPM screen (index 6)                                               //
+////////////////////////////////////////////////////////////////////////////////
 void displayscreenrpm()
 {
   lcd.setCursor(4, 0);
   lcd.print("RPM:");
   lcd.setCursor(8, 0);
-  lcd.print("    ");
+  lcd.print("     ");
   lcd.setCursor(8, 0);
   lcd.print(rpm);
   lcd.setCursor(4, 1);
   lcd.print("MAX:");
   lcd.setCursor(8, 1);
-  lcd.print("    ");
+  lcd.print("     ");
   lcd.setCursor(8, 1);
   lcd.print(rpmmax);
   return;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Display alarm screen (index 7)                                             //
+////////////////////////////////////////////////////////////////////////////////
 void displayscreenalarm()
 {
   return;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Light LEDs to indicate RPM                                                 //
+////////////////////////////////////////////////////////////////////////////////
 void displayleds(int revs)
 {
   for (int displed = 0; displed < ledCount; displed++)
@@ -448,9 +622,12 @@ void displayleds(int revs)
   return;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// RPM Interrupt                                                              //
+////////////////////////////////////////////////////////////////////////////////
 void tachpulse()
 {
-  rpmcount++;
+  rpmcount++;     // increment rpm counter every time tacho pulse occurs
   return;
 }
 
