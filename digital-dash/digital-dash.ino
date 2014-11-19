@@ -18,7 +18,7 @@ long logperiod = 1000;
 long logold = 0;
 long displayperiod = 500;
 long displayold = 0;
-long refreshledsperiod = 200;
+long refreshledsperiod = 300;
 long refreshledsold = 0;
 unsigned long currentmillis;
 int watertemp = 0;
@@ -65,7 +65,7 @@ LiquidCrystal lcd(36, 34, 32, 30, 28, 26);
 void setup()
 {
   Serial.begin(9600);
-  attachInterrupt(0, tachpulse, CHANGE);
+  attachInterrupt(0, tachpulse, FALLING);
 
 // set digital pins as inputs to read key presses
   pinMode(3,INPUT_PULLUP);
@@ -286,7 +286,7 @@ float readairtemp()
 
 int readrpm()
 {
-  rpmvalue = (rpmcount*150);  // *60 secs  /2 state changes  *5 samples per sec
+  rpmvalue = (rpmcount*200);  // *60 secs *3.333 samples per sec, gives a round multiple of 250 for display
   rpmcount = 0;
   if (rpm > rpmmax)
   {
@@ -451,9 +451,6 @@ void displayleds(int revs)
 void tachpulse()
 {
   rpmcount++;
-  digitalWrite(52, HIGH);
-  delay(250);
-  digitalWrite(52, LOW);
   return;
 }
 
