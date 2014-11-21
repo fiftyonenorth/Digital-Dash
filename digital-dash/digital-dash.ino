@@ -8,6 +8,12 @@
 // 02    Tacho pulse input - Interrupt 0                                      //
 // 03    Right push btton                                                     //
 // 04    Left push button                                                     //
+// 26    LCD RS                                                               //
+// 28    LCD Enable                                                           //
+// 30    LCD D4                                                               //
+// 32    LCD D5                                                               //
+// 34    LCD D6                                                               //
+// 36    LCD D7                                                               //
 // 40    Tacho LED8                                                           //
 // 41    Tacho LED1                                                           //
 // 42    Tacho LED9                                                           //
